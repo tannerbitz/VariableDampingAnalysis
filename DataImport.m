@@ -163,6 +163,11 @@ for i = length(trials):-1:1
     v = trials(i).Data.xdot;
     a = trials(i).Data.xdotdot;
     trials(i).Data.va = v.*a;
+    
+    % Calculate first and last movement indices
+    trials(i).FirstMoveInd = GetFirstMoveInd(trials(i).Data.va);
+    trials(i).LastMoveInd = GetLastMoveInd(trials(i).Data.va);
+    
 end
 %%
 matfilename = sprintf('Subject%dData.mat', trials(1).SubjectNumber);
@@ -312,3 +317,5 @@ for i = 1:length(emglist)
     figure
     plot(trials(2).Data.Emg(emg,:))
 end
+
+

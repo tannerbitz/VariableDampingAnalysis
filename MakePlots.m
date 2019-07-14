@@ -24,6 +24,35 @@ for i = 1:length(subjectMats)
 end
           
 
+% Rise Time
+
+for i = 1:length(trials)
+    
+    x = trials(i).Data.EndEffPos_FromJA;
+    
+    zero_level = GetZeroLevel(x);
+    ss_level = GetSteadyStateLevel(x);
+    
+    ten_percent_level = zero_level + 0.1*(ss_level - zero_level);
+    ninty_percent_level = zero_level + 0.9*(ss_level - zero_level);
+    
+    if (ss_level < 0)
+        inds = x < ten_percent_level;
+        ten_percent_time = find(inds, 1, 'first');
+        
+        inds = x < ninty_percent_level;
+        ninty_percent_time = find(inds, 1, 'first');
+    else
+        inds = x > ten_percent_level;
+        ten_percent_time = find(inds, 1, 'first');
+        
+        inds = x > ninty_percent_level;
+        ninty_percent_time = find(inds, 1, 'first');
+        
+    end
+    trials(i).RiseTime = ninty_percent_time - ten_percent_time;
+    
+end
 
 
 %% Make Plots Individually
@@ -87,7 +116,7 @@ end
 
 locations = {'Left', 'Right', 'Down', 'Up'};
 for targetDirNum = 1:4
-    fig = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, 'ShowMovementMatch', true);
+    fig = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, 'ShowMovementMatch', true, 'ShowViolations', false);
     set(fig,'PaperOrientation','landscape');
     set(fig,'PaperUnits','normalized');
     set(fig,'PaperPosition', [0 0 1 1]);
@@ -99,11 +128,42 @@ end
 
 %% Make max velocity bar graphs
 
+subject = 20;
+
 % Collect all filtered data
 data_processed = [];
 for targetNum = 1:4
     for dampNum = 1:3
-        data_processed = [data_processed; FilterAndAnalyzeData(trials, targetNum, dampNum)];
+        temp = FilterAndAnalyzeData(trials, targetNum, dampNum);
+        data_processed = [data_processed; temp];
+        
+        % print data table
+        maxVelAll = [];
+        maxVelArr = temp.XdotMax;
+        fprintf('\n\n')
+        fprintf('Direction: %s        Damping: %s\n', temp.TargetDirText, temp.DampingText)    
+        fprintf('--------------------------------------------------------------\n');
+        fprintf('Subject\tMean[m/s]\tStd[m/s]\tMax[m/s]\tn\n')
+        fprintf('--------------------------------------------------------------\n');
+        for i =1:length(maxVelArr)
+            maxVel = maxVelArr(i);
+            fprintf('%d\t%f\t%f\t%f\t%d\n', ...
+                    maxVel.SubjectNumber, ...
+                    maxVel.max_xdot_mean, ...
+                    maxVel.max_xdot_std, ...
+                    maxVel.max_xdot_max, ...
+                    maxVel.nTrials)
+            maxVelAll = [maxVelAll, maxVel.max_xdot];
+        end
+        fprintf('--------------------------------------------------------------\n');
+        fprintf('Total\t%f\t%f\t%f\t%d\n', ...
+                mean(maxVelAll), ...
+                std(maxVelAll), ...
+                max(maxVelAll), ...
+                length(maxVelAll));
+        
+        
+        
     end
 end
 
@@ -115,13 +175,25 @@ for targetNum = 1:4
     data_processed_set = data_processed(set_inds);
     
     % Get means, std, damp label text
-    xdotmax_means = [data_processed_set.XdotMax_data_wov_mean];
-    xdotmax_std = [data_processed_set.XdotMax_data_wov_std];
+    xdotmax_mean = zeros(1,3);
+    xdotmax_std = zeros(1,3);
+    nTrials = zeros(1,3);
+    for i = 1:3
+        xdotmax_data = data_processed_set(i).XdotMax;
+        subjectInds = [xdotmax_data.SubjectNumber];
+        subjectInd = subjectInds == subject;
+        
+        xdotmax_subject = xdotmax_data(subjectInd);
+        xdotmax_mean(i) = xdotmax_subject.max_xdot_mean;
+        xdotmax_std(i) = xdotmax_subject.max_xdot_std;
+        nTrials(i) = xdotmax_subject.nTrials;
+    end
+    
     dampTexts = {};
     dampTextsCat = {};
     for i = 1:length(data_processed_set)
         dText = sprintf('%s (n=%d)', data_processed_set(i).DampingText, ...
-                                     length(data_processed_set(i).PercentOvershoot_data_wov));
+                                     nTrials(i));
         dampTexts{i} = dText;
         dampTextsCat{i} = data_processed_set(i).DampingText;
     end
@@ -129,19 +201,23 @@ for targetNum = 1:4
     
     % Plot 
     ax = subplot(1, 4, targetNum);
-    for i = 1:length(xdotmax_means)
-        bar(c(i),xdotmax_means(i));
+    for i = 1:length(xdotmax_mean)
+        bar(c(i),xdotmax_mean(i));
         hold on
     end
     
-    for i = 1:length(xdotmax_means)
-        er = errorbar(c(i),xdotmax_means(i), xdotmax_std(i));
+    for i = 1:length(xdotmax_mean)
+        er = errorbar(c(i),xdotmax_mean(i), xdotmax_std(i));
         er.Color = [0,0,0];
         er.LineStyle = 'none';
     end
     
     % Make plot pretty
-    title(data_processed_set(1).TargetDirText);
+    if (targetNum ~= 2)
+        title(data_processed_set(1).TargetDirText);
+    else
+        title(sprintf('Subject %d\n\n%s', subject, data_processed_set(1).TargetDirText))
+    end
     if (targetNum == 1)
         ylabel('$\dot{x}$ [m/s]', 'Interpreter', 'latex');
     end
@@ -164,12 +240,55 @@ SetYLimsEqual(child, 'BottomPadPercent', 0)
 
 
 %% Make percent overshoot bar graphs
+subject = 20;
+
+po_rm_meas = zeros(10,4,4);
+
 
 % Collect all filtered data
 data_processed = [];
 for targetNum = 1:4
     for dampNum = 1:3
-        data_processed = [data_processed; FilterAndAnalyzeData(trials, targetNum, dampNum)];
+        temp = FilterAndAnalyzeData(trials, targetNum, dampNum);
+        data_processed = [data_processed; temp];
+        
+        po_rm_means_temp = zeros(10,2);
+        
+        % print data table
+        poAll = [];
+        poArr = temp.PercentOvershoot;
+        fprintf('\n\n')
+        fprintf('Direction: %s        Damping: %s\n', temp.TargetDirText, temp.DampingText)    
+        fprintf('--------------------------------------------------------------\n');
+        fprintf('Percent Overshoot\n')
+        fprintf('Subject\tMean\tStd\tMax\tn\n')
+        fprintf('--------------------------------------------------------------\n');
+        for i =1:length(poArr)
+            po = poArr(i);
+            fprintf('%d\t%f\t%f\t%f\t%d\n', ...
+                    po.SubjectNumber, ...
+                    po.po_mean, ...
+                    po.po_std, ...
+                    po.po_max, ...
+                    po.nTrials)
+            poAll = [poAll, po.po];
+            
+            % put data into temp repeated measures anova mean array
+            po_rm_means_temp(i,1) = po.SubjectNumber;
+            po_rm_means_temp(i,2) = po.po_mean;
+        end
+        fprintf('--------------------------------------------------------------\n');
+        fprintf('Total\t%f\t%f\t%f\t%d\n', ...
+                mean(poAll), ...
+                std(poAll), ...
+                max(poAll), ...
+                length(poAll));
+            
+        % put temp data into repeated measures anova mean array 
+        po_rm_means_temp = sortrows(po_rm_means_temp);
+        po_rm_meas(:,1,targetNum) = po_rm_means_temp(:,1);
+        po_rm_meas(:,dampNum+1,targetNum) = po_rm_means_temp(:,2);
+            
     end
 end
 
@@ -181,13 +300,25 @@ for targetNum = 1:4
     data_processed_set = data_processed(set_inds);
     
     % Get means, std, damp label text
-    po_means = [data_processed_set.PercentOvershoot_data_wov_mean];
-    po_std = [data_processed_set.PercentOvershoot_data_wov_std];
+    po_mean = zeros(1,3);
+    po_std = zeros(1,3);
+    nTrials = zeros(1,3);
+    for i = 1:3
+        po_data = data_processed_set(i).PercentOvershoot;
+        subjectInds = [po_data.SubjectNumber];
+        subjectInd = subjectInds == subject;
+        
+        po_subject = po_data(subjectInd);
+        po_mean(i) = po_subject.po_mean;
+        po_std(i) = po_subject.po_std;
+        nTrials(i) = po_subject.nTrials;
+    end
+    
     dampTexts = {};
     dampTextsCat = {};
     for i = 1:length(data_processed_set)
         dText = sprintf('%s (n=%d)', data_processed_set(i).DampingText, ...
-                                     length(data_processed_set(i).PercentOvershoot_data_wov));
+                                     nTrials(i));
         dampTexts{i} = dText;
         dampTextsCat{i} = data_processed_set(i).DampingText;
     end
@@ -195,19 +326,23 @@ for targetNum = 1:4
     
     % Plot 
     ax = subplot(1, 4, targetNum);
-    for i = 1:length(po_means)
-        bar(c(i),po_means(i));
+    for i = 1:length(po_mean)
+        bar(c(i),po_mean(i));
         hold on
     end
     
-    for i = 1:length(po_means)
-        er = errorbar(c(i),po_means(i), po_std(i));
+    for i = 1:length(po_mean)
+        er = errorbar(c(i),po_mean(i), po_std(i));
         er.Color = [0,0,0];
         er.LineStyle = 'none';
     end
     
     % Make plot pretty
-    title(data_processed_set(1).TargetDirText);
+    if (targetNum ~= 2)
+        title(data_processed_set(1).TargetDirText);
+    else
+        title(sprintf('Subject %d\n\n%s', subject, data_processed_set(1).TargetDirText))
+    end
     if (targetNum == 1)
         ylabel('Percent Overshoot', 'Interpreter', 'latex');
     end
@@ -228,6 +363,57 @@ for i = length(child):-1:1
 end
 SetYLimsEqual(child, 'BottomPadPercent', 0)
 
+
+% Repeated Measures Anova - Percent Overshoot
+fprintf('RM ANOVA - Percent Overshoot - All Damping Groups')
+% Left
+fprintf('\n\n\nLeft\n')
+CalcRepeatedAnova(po_rm_meas(:,2:4,1));
+
+
+% Left
+fprintf('\n\n\nRight\n')
+CalcRepeatedAnova(po_rm_meas(:,2:4,2));
+
+
+% Left
+fprintf('\n\n\nDown\n')
+CalcRepeatedAnova(po_rm_meas(:,2:4,3));
+
+% Left
+fprintf('\n\n\nUp\n')
+CalcRepeatedAnova(po_rm_meas(:,2:4,4));
+
+
+%% Repeated Measures Anova - Percent Overshoot - Positive vs Negative
+% Left
+po_rm_results = [];
+targetDirTexts = {'Left', 'Right', 'Down', 'Up'};
+for targetNum = 1:4
+    fprintf('\n\n\n%s\n', targetDirTexts{targetNum});
+    fprintf('Positive vs Negative\n');
+    temp = CalcRepeatedAnova(po_rm_meas(:,[2,3],targetNum));
+    temp.Direction = targetDirTexts{targetNum};
+    temp.DampGroup1 = 'Positive';
+    temp.DampGroup2 = 'Negative';
+    po_rm_results = [po_rm_results, temp];
+    
+    fprintf('\nPositive vs Variable\n');
+    CalcRepeatedAnova(po_rm_meas(:,[2,4],targetNum));
+    temp = CalcRepeatedAnova(po_rm_meas(:,[2,4],targetNum));
+    temp.Direction = targetDirTexts{targetNum};
+    temp.DampGroup1 = 'Positive';
+    temp.DampGroup2 = 'Variable';
+    po_rm_results = [po_rm_results, temp];
+
+    fprintf('\nNegative vs Variable\n');
+    temp = CalcRepeatedAnova(po_rm_meas(:,[3,4],targetNum));
+    temp.Direction = targetDirTexts{targetNum};
+    temp.DampGroup1 = 'Negative';
+    temp.DampGroup2 = 'Variable';
+    po_rm_results = [po_rm_results, temp];
+end
+
 %% Make Force Plots During Movement
 
 
@@ -242,86 +428,436 @@ end
 % Line Color RGB vals
 lightGreyColor = [179, 179, 179]/256;
 
+fprintf('\n\n\n')
+fprintf('--------------------------------------------------------------\n');
+fprintf('Direction\tDamping\tSubject\tMeanMean[N]\tMeanStd[N]\tMaxMean[N]\tMaxStd[N]\tn\n')
+fprintf('--------------------------------------------------------------\n');
+
+x_all = {[],[],[];
+         [],[],[];
+         [],[],[];
+         [],[],[]};
+     
+force_all = {[],[],[];
+             [],[],[];
+             [],[],[];
+             [],[],[]};
+
+force_rm_max = zeros(10,4,4);
+force_rm_mean = zeros(10,4,4);
+         
+% Print force data
 for targetNum = 1:4
     % Get subset of data of based on target number
     set_inds = [data_processed.TargetDirNum] == targetNum;
     data_processed_set = data_processed(set_inds);
 
-    lastMoveInds = [];
+    % Get all trials without violations with this target number
+    trials_wov = [];
+%     va_mean = {};
+    va_mean_movement_length = [];
     for i = 1:length(data_processed_set)
-        va_mm_mean = mean(data_processed_set(i).va_mm, 2);
-        inds = abs(va_mm_mean) > 0.001;
-        lastMoveInds = [lastMoveInds, find(inds, 1, 'last')];        
+        trials_wov = [trials_wov; data_processed_set(i).wov.trials];
+        va_mean = data_processed_set(i).wov.va.mean_;
+        va_mean_movement_length(end+1) = GetLastMoveInd(va_mean) - GetFirstMoveInd(va_mean);
     end
-    lastMoveInd = max(lastMoveInds);
+    
+    max_movement_length = max(va_mean_movement_length);
+    
 
+    
+    subjectNumbersAll = [trials_wov.SubjectNumber];
+    subjectNumbers = unique(subjectNumbersAll);
+    for i = 1:length(subjectNumbers)
+        subjectNumber = subjectNumbers(i);
+        subjectInds = subjectNumbersAll == subjectNumber;
+        trials_subject = trials_wov(subjectInds);
+        
+        
+ 
+        
+        for dampNum = 1:3
+            dampNumAll = [trials_subject.DampingNumber];
+            dampNumInds = dampNumAll == dampNum;
+            trials_subject_damp = trials_subject(dampNumInds);
+            dampText = trials_subject_damp(i).DampingText;
+            tarDirText = trials_subject_damp(i).TargetDirText;
+            
+            force = [];
+            x = [];
+            for j = 1:length(trials_subject_damp)
+                firstMoveInd = trials_subject_damp(j).FirstMoveInd;
+                lastMoveInd = firstMoveInd + max_movement_length;
+                force = [force, trials_subject_damp(j).Data.Force(firstMoveInd:lastMoveInd, 1)];
+                x = [x, trials_subject_damp(j).Data.EndEffPos_FromJA(firstMoveInd:lastMoveInd)];
+            end
+            
+            % add raw data to arrays
+            force_all{targetNum, dampNum} = [force_all{targetNum, dampNum}, force];
+            x_all{targetNum, dampNum} = [x_all{targetNum, dampNum}, x];
+            
+            % calc mean, std, max of rms of the mean
+            force_rms = sqrt(force.^2);
+            force_rms_mean = mean(force_rms, 1);
+            force_rms_max = max(force_rms, [], 1);
+            
+            force_rms_mean_mean = mean(force_rms_mean);
+            force_rms_mean_std = std(force_rms_mean);
+            force_rms_max_mean = mean(force_rms_max);
+            force_rms_max_std = std(force_rms_max);
+            
+            % put data into repeated measures anova data array
+            force_rm_mean(i,1,targetNum) = subjectNumber;
+            force_rm_mean(i,dampNum+1,targetNum) = force_rms_mean_mean;
+            force_rm_max(i,1,targetNum) = subjectNumber;
+            force_rm_max(i,dampNum+1,targetNum) = force_rms_max_mean;
+            
+            % print data table
+            fprintf('%s\t%s\t%d\t%f\t%f\t%f\t%f\t%d\n', ...
+                    tarDirText, ...
+                    dampText, ...
+                    subjectNumber, ...
+                    force_rms_mean_mean, ...
+                    force_rms_mean_std, ...
+                    force_rms_max_mean, ...
+                    force_rms_max_std, ...
+                    length(trials_subject_damp))
+
+
+        end
+    end
+end
+
+dampText = {'Positive', 'Negative', 'Variable'};
+targetDirText = {'Left', 'Right', 'Down', 'Up'};
+
+for targetNum = 1:4
     fig = figure;
     set(fig,'Color',[1,1,1]);
-    for i = 1:length(data_processed_set)
-        dampNum = data_processed_set(i).DampingNum;
-        dampText = data_processed_set(i).DampingText;
-        tarDirText = data_processed_set(i).TargetDirText;
+    for dampNum = 1:3
+        x_temp = GetDataSetStats(x_all{targetNum, dampNum});
+        force_temp = GetDataSetStats(force_all{targetNum, dampNum});
         
-        pltcols = 3;
-        pltrows = 2;
-        
-        % x movement matched data
-        x_mm = data_processed_set(i).x_mm_wov(1:lastMoveInd, :);
-        x_mm_mean = mean(x_mm, 2);
-        x_mm_std = std(x_mm, [], 2);
-        x_mm_ub = x_mm_mean + 3*x_mm_std;
-        x_mm_lb = x_mm_mean - 3*x_mm_std;
-        
-        force_mm = abs(data_processed_set(i).force_mm_wov(1:lastMoveInd,:));
-        force_mm_mean = mean(force_mm, 2);
-        
-        subplot(pltrows, pltcols, dampNum)
-        plot(x_mm, 'Color', lightGreyColor);
+        % Plot x
+        subplot(2,3,dampNum)
+        plot(x_temp.mean_, 'Color', 'k');
         hold on
-        plot(x_mm_mean, 'Color', 'k')
-        plot(x_mm_ub, 'Color', 'k', 'LineStyle', '--');
-        plot(x_mm_lb, 'Color', 'k', 'LineStyle', '--');
+        plot(x_temp.ub_, 'Color', 'k', 'LineStyle', '--');
+        plot(x_temp.lb_, 'Color', 'k', 'LineStyle', '--');
         hold off
-        if (dampNum == 1)
-            ylabel('x [mm]')
-            title(dampText);
-        elseif (dampNum == 2)
-            title(sprintf('Direction: %s\n\n%s', tarDirText, dampText));
-        elseif (dampNum == 3)
-            title(dampText)
+        if (dampNum == 2)
+            title(sprintf('%s\n\n%s', targetDirText{targetNum}, dampText{dampNum}));
+        else
+            title(sprintf('%s', dampText{dampNum}));
         end
-            
+        if (dampNum == 1)
+            ylabel('x [m]')
+        end
         
-        subplot(pltrows, pltcols, pltcols*1+dampNum)
-        plot(force_mm, 'Color', lightGreyColor)
+        
+        % Plot force
+        subplot(2,3,dampNum+3)
+        force_rms = sqrt(force_temp.mean_.^2);
+        plot(force_temp.mean_, 'k');
         hold on
-        plot(force_mm_mean, 'Color', 'k')
-        plot(mean(force_mm_mean)*ones(size(force_mm_mean)), 'Color', 'r', 'LineWidth', 1.25);
-        plot(max(force_mm_mean)*ones(size(force_mm_mean)), 'Color', 'b', 'LineWidth', 1.25);
+        plot(force_temp.ub_, 'k--');
+        plot(force_temp.lb_, 'k--', 'HandleVisibility', 'off');
+        plot(mean(force_rms)*ones(size(force_rms)), 'r')
+        plot(max(force_rms)*ones(size(force_rms)), 'b')
         hold on
+        legend('Nominal', '+/-3std', 'RMS Average', '|Max|');
+        legend('boxoff');
         if (dampNum == 1)
-            ylabel('|Force| [N]')
-            xlabel('Time [ms]')
-        elseif (dampNum == 2)
-            xlabel('Time [ms]')
-        elseif (dampNum == 3)
-            xlabel('Time [ms]')
+            ylabel('Force [N]')
         end
-
+        xlabel('Time [ms]')
     end
     
-    ax1 = subplot(pltrows, pltcols, 1);
-    ax2 = subplot(pltrows, pltcols, 2);
-    ax3 = subplot(pltrows, pltcols, 3);
+    axes_arr = [subplot(2,3,1), subplot(2,3,2), subplot(2,3,3)];
+    SetYLimsEqual(axes_arr);
     
-    axes_arr = [ax1, ax2, ax3];
-    SetYLimsEqual(axes_arr, 'TopPadPercent', 0.05, 'BottomPadPercent', 0.05)
+    axes_arr = [subplot(2,3,4), subplot(2,3,5), subplot(2,3,6)];
+    SetYLimsEqual(axes_arr);
     
-    ax1 = subplot(pltrows, pltcols, 4);
-    ax2 = subplot(pltrows, pltcols, 5);
-    ax3 = subplot(pltrows, pltcols, 6);
-    
-    axes_arr = [ax1, ax2, ax3];
-    SetYLimsEqual(axes_arr, 'TopPadPercent', 0, 'BottomPadPercent', 0)
     
 end
+
+
+fprintf('\n\n\n')
+fprintf('--------------------------------------------------------------\n');
+fprintf('Direction\tDamping\tMean[N]\tMax[N]\tn\n')
+fprintf('--------------------------------------------------------------\n');
+
+for targetNum = 1:4
+    for dampNum = 1:3
+        force_temp = GetDataSetStats(force_all{targetNum, dampNum});
+        force_rms = sqrt(force_temp.mean_.^2);
+        fprintf('%s\t%s\t%f\t%f\t%d\n', ...
+                targetDirText{targetNum}, ...
+                dampText{dampNum}, ...
+                mean(force_rms), ...
+                max(force_rms), ...
+                size(force_temp.data_, 2));
+                
+        
+    end
+end
+
+%%
+% Repeated Measures Anova - Force Mean
+% Left
+fprintf('\n\n\nLeft - Force Mean\n')
+CalcRepeatedAnova(force_rm_mean(:,2:4,1));
+
+fprintf('\n\n\nLeft - Force Mean\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_mean(i,1,1), ...
+                                force_rm_mean(i,2,1), ...
+                                force_rm_mean(i,3,1), ...
+                                force_rm_mean(i,4,1))
+end
+
+% Right
+fprintf('\n\n\nRight - Force Mean\n')
+CalcRepeatedAnova(force_rm_mean(:,2:4,2));
+
+fprintf('\n\n\nRight - Force Mean\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_mean(i,1,2), ...
+                                force_rm_mean(i,2,2), ...
+                                force_rm_mean(i,3,2), ...
+                                force_rm_mean(i,4,2))
+end
+
+% Down
+fprintf('\n\n\nDown - Force Mean\n')
+CalcRepeatedAnova(force_rm_mean(:,2:4,3));
+
+fprintf('\n\n\nDown - Force Mean\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_mean(i,1,3), ...
+                                force_rm_mean(i,2,3), ...
+                                force_rm_mean(i,3,3), ...
+                                force_rm_mean(i,4,3))
+end
+
+% Up
+fprintf('\n\n\nUp - Force Mean\n')
+CalcRepeatedAnova(force_rm_mean(:,2:4,4));
+
+fprintf('\n\n\nUp - Force Mean\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_mean(i,1,4), ...
+                                force_rm_mean(i,2,4), ...
+                                force_rm_mean(i,3,4), ...
+                                force_rm_mean(i,4,4))
+end
+
+% Repeated Measures Anova - Force Max
+% Left
+fprintf('\n\n\nLeft - Force Max\n')
+CalcRepeatedAnova(force_rm_max(:,2:4,1));
+
+fprintf('\n\n\nLeft - Force Max\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_max(i,1,1), ...
+                                force_rm_max(i,2,1), ...
+                                force_rm_max(i,3,1), ...
+                                force_rm_max(i,4,1))
+end
+
+% Right
+fprintf('\n\n\nRight - Force Max\n')
+CalcRepeatedAnova(force_rm_max(:,2:4,2));
+
+fprintf('\n\n\nRight - Force Max\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_max(i,1,2), ...
+                                force_rm_max(i,2,2), ...
+                                force_rm_max(i,3,2), ...
+                                force_rm_max(i,4,2))
+end
+
+% Down
+fprintf('\n\n\nDown - Force Max\n')
+CalcRepeatedAnova(force_rm_max(:,2:4,3));
+
+fprintf('\n\n\nDown - Force Max\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_max(i,1,3), ...
+                                force_rm_max(i,2,3), ...
+                                force_rm_max(i,3,3), ...
+                                force_rm_max(i,4,3))
+end
+
+% Up
+fprintf('\n\n\nUp - Force Max\n')
+CalcRepeatedAnova(force_rm_max(:,2:4,4));
+
+fprintf('\n\n\nUp - Force Max\n')
+fprintf('Subject\tPositive\tNegative\tVariable\n')
+for i = 1:size(force_rm_mean,1)
+    fprintf('%d\t%f\t%f\t%f\n', force_rm_max(i,1,4), ...
+                                force_rm_max(i,2,4), ...
+                                force_rm_max(i,3,4), ...
+                                force_rm_max(i,4,4))
+end
+
+%% Rise Time
+
+
+% Collect all trials without violations
+trials_wov = [];
+for targetNum = 1:4
+    for dampNum = 1:3
+        temp = FilterAndAnalyzeData(trials, targetNum, dampNum);
+        trials_wov = [trials_wov; temp.wov.trials];
+    end
+end
+
+
+rise_time_all = {[],[],[];
+                [],[],[];
+                [],[],[];
+                [],[],[]};
+dampText = {'Positive', 'Negative', 'Variable'};
+targetDirText = {'Left', 'Right', 'Down', 'Up'};
+
+rt_rm_meas = zeros(10, 4, 4);
+
+fprintf('Rise Time\n')
+fprintf('Direction\tDamping\tSubject\tMean[ms]\tStd[ms]\tn\n')
+
+subjectNumbersAll = [trials_wov.SubjectNumber];
+subjectNumbers = unique(subjectNumbersAll);
+    
+for iSubject = 1:length(subjectNumbers)
+    subjectNumber = subjectNumbers(iSubject);
+
+    subjectInds = subjectNumbersAll == subjectNumber;
+    trials_subject = trials_wov(subjectInds);
+
+    targetNumbers = [trials_subject.TargetDirNum];
+    dampNumbers = [trials_subject.DampingNumber];
+
+    rt_rm_meas(iSubject, 1, :) = subjectNumber;
+    
+    
+    for targetNum = 1:4
+        for dampNum = 1:3
+            targetInds = targetNumbers == targetNum;
+            dampInds = dampNumbers == dampNum;
+
+            setInds = targetInds & dampInds;
+            trials_set = trials_subject(setInds);
+
+            rise_time_subject = [trials_set.RiseTime];
+            
+            if (dampNum == 3)
+                mer = 1;
+            end
+            
+            rt_rm_meas(iSubject, dampNum+1, targetNum) = mean(rise_time_subject);
+
+
+            fprintf('%s\t%s\t%d\t%f\t%f\t%d\n', ...
+                    targetDirText{targetNum}, ...
+                    dampText{dampNum}, ...
+                    subjectNumber, ...
+                    mean(rise_time_subject), ...
+                    std(rise_time_subject), ...
+                    length(rise_time_subject));
+
+            rise_time_all{targetNum, dampNum} = [rise_time_all{targetNum, dampNum}, rise_time_subject];
+
+        end
+    end
+
+end
+
+fprintf('\n\n')
+fprintf('Rise Time\n')
+fprintf('Direction\tDamping\tMean[ms]\tStd[ms]\tn\n')
+for targetNum = 1:4
+    for dampNum = 1:3
+
+        rise_time = rise_time_all{targetNum, dampNum};
+
+        fprintf('%s\t%s\t%f\t%f\t%d\n', ...
+                targetDirText{targetNum}, ...
+                dampText{dampNum}, ...
+                mean(rise_time), ...
+                std(rise_time), ...
+                length(rise_time));
+
+        rise_time_all{targetNum, dampNum} = [rise_time_all{targetNum, dampNum}, ];
+
+    end
+end
+
+% Make plot
+fig = figure;
+set(fig,'Color',[1,1,1]);
+
+c = categorical(dampText);
+for targetNum = 1:4
+    rise_time_means = zeros(1,3);
+    rise_time_stds = zeros(1,3);
+    for dampNum = 1:3
+        rise_time_means(dampNum) = mean(rise_time_all{targetNum, dampNum});
+        rise_time_stds(dampNum) = std(rise_time_all{targetNum, dampNum});
+    end
+    
+    % Plot 
+    ax = subplot(1, 4, targetNum);
+    for i = 1:3
+        bar(c(i),rise_time_means(i));
+        hold on
+    end
+    
+    for i = 1:3
+        er = errorbar(c(i),rise_time_means(i), rise_time_stds(i));
+        er.Color = [0,0,0];
+        er.LineStyle = 'none';
+    end
+    
+    % Make plot pretty
+    title(targetDirText{targetNum});
+    if (targetNum == 1)
+        ylabel('Rise Time[ms]', 'Interpreter', 'latex');
+    end
+    box('off')
+    set(ax, 'ticklength', [0,0]);
+    legend(dampText);
+    legend('boxoff')
+    hold off
+end
+
+
+% Rise Time Repeated Measures Anova
+
+% Left
+fprintf('\n\n\nLeft\n')
+CalcRepeatedAnova(rt_rm_meas(:,2:4,1));
+
+
+% Left
+fprintf('\n\n\nRight\n')
+CalcRepeatedAnova(rt_rm_meas(:,2:4,2));
+
+
+% Left
+fprintf('\n\n\nDown\n')
+CalcRepeatedAnova(rt_rm_meas(:,2:4,3));
+
+% Left
+fprintf('\n\n\nUp\n')
+CalcRepeatedAnova(rt_rm_meas(:,2:4,4));
+
