@@ -6,7 +6,8 @@ clc; close all; clear all;
 % x(t) = xi + (xf-xi)*(10(t/d)^3-15(t/d)^4+6(t/d)^5)
 
 xi = 0;
-xf = 5/180*pi;  % rad
+% xf = 5/180*pi;  % rad
+xf = 0.1; % meters
 d = 0.3;        % second
 Hz = 1000;      % measurement rate
 
@@ -23,8 +24,8 @@ va_max = max(va);
 va_min = min(va);
 
 %% State dependent damping (single function)
-b_UB = 1;
-b_LB = -0.5;
+b_UB = 60;
+b_LB = -20;
 r = 0.8;       % At va_max, b_var will have the r*b_LB value!
 
 k = -log((1-r)*b_LB/(r*b_LB-b_UB))/va_max;
@@ -51,40 +52,63 @@ fullscreen = get(0,'ScreenSize');
 figure('Position',[0 0 fullscreen(3) fullscreen(4)]);
 set(gcf,'Color',[1,1,1]);
 
-subplot 521
+% subplot 521
+subplot(5,1,1)
 plot(t,x,'linewidth',2);
 box off;
 %title ('Displacement (rad)');
+title('Position')
+ylabel('$x \hspace{4pt} [m]$', 'Interpreter', 'latex', 'FontSize', 12)
 
-subplot 523
+% subplot 523
+subplot(5,1,2)
 plot(tv,v,'linewidth',2);
 box off;
 %title ('Velocity (rad/s)');
+title('Velocity')
+ylabel('$\dot{x} \hspace{4pt} [m/s]$', 'Interpreter', 'latex', 'FontSize', 12)
 
-subplot 525
+% subplot 525
+subplot(5,1,3)
 plot(ta,a,'linewidth',2);
 box off;
 %title ('Acceleration (rad/s^2)');
+title('Acceleration') 
+ylabel('$\ddot{x} \hspace{4pt} [m/s^2]$', 'Interpreter', 'latex', 'FontSize', 12)
 
-subplot 527
+% subplot 527
+subplot(5,1,4)
 plot(ta,va,'linewidth',2);
 box off;
+title('User Intent')
+ylabel('$\dot{x}\ddot{x} \hspace{4pt} [m^2/s^3]$', 'Interpreter', 'latex', 'FontSize', 12)
 %title ('Velocity * Acceleration (rad^2/s^3)');
 
-subplot 529
-plot(ta,b_var,'linewidth',2);
-text(max(ta)*0.1,max(b_var)*0.9,strcat('Movement time = ', num2str(d), 'sec.'), 'FontSize', 12);
-text(max(ta)*0.1,max(b_var)*0.7,strcat('Max v*a =', num2str(va_max), 'rad^2/s^3'), 'FontSize', 12);
-text(max(ta)*0.1,max(b_var)*0.5,strcat('k =', num2str(k), 'Nms/rad'), 'FontSize', 12);
+% subplot 529
+% subplot(5,1,4)
+% plot(ta,b_var,'linewidth',2);
+% text(max(ta)*0.1,max(b_var)*0.9,strcat('Movement time = ', num2str(d), 'sec.'), 'FontSize', 12);
+% text(max(ta)*0.1,max(b_var)*0.7,strcat('Max v*a =', num2str(va_max), 'rad^2/s^3'), 'FontSize', 12);
+% text(max(ta)*0.1,max(b_var)*0.5,strcat('k =', num2str(k), 'Nms/rad'), 'FontSize', 12);
 
-subplot (5,2,10)
+% subplot (5,2,10)
+subplot(5,1,5)
 plot(ta,b_var2,'linewidth',2);
-text(max(ta)*0.1,max(b_var)*0.9,strcat('Movement time = ', num2str(d), 'sec.'), 'FontSize', 12);
-text(max(ta)*0.1,max(b_var)*0.7,strcat('Max v*a =', num2str(va_max), 'rad^2/s^3'), 'FontSize', 12);
-text(max(ta)*0.1,max(b_var)*0.5,strcat('Min v*a =', num2str(va_min), 'rad^2/s^3'), 'FontSize', 12);
-text(max(ta)*0.1,max(b_var)*0.3,strcat('kp =', num2str(kp), 'Nms/rad'), 'FontSize', 12);
-text(max(ta)*0.1,max(b_var)*0.1,strcat('kn =', num2str(kn), 'Nms/rad'), 'FontSize', 12);
+hold on
+% plot(ta,b_var, 'linewidth',2);
+% hold off
+% legend('Dual Damping', 'Single Damping')
+% legend('boxoff')
+% legend('Location', 'northwest')
 
+% text(max(ta)*0.1,max(b_var)*0.9,strcat('Movement time = ', num2str(d), 'sec.'), 'FontSize', 12);
+% text(max(ta)*0.1,max(b_var)*0.7,strcat('Max v*a =', num2str(va_max), 'rad^2/s^3'), 'FontSize', 12);
+% text(max(ta)*0.1,max(b_var)*0.5,strcat('Min v*a =', num2str(va_min), 'rad^2/s^3'), 'FontSize', 12);
+% text(max(ta)*0.1,max(b_var)*0.3,strcat('kp =', num2str(kp), 'Nms/rad'), 'FontSize', 12);
+% text(max(ta)*0.1,max(b_var)*0.1,strcat('kn =', num2str(kn), 'Nms/rad'), 'FontSize', 12);
+title('Robotic Damping')
+ylabel('$b_r \hspace{4pt} [Ns/m]$', 'Interpreter', 'latex', 'FontSize', 12)
+xlabel('Time [s]', 'FontSize', 12)
 box off;
 %title ('State-dependent variable damping [Nms/rad]');
 

@@ -12,7 +12,9 @@ subjectMats = {
                 'Subject26Data.mat', ...
                 'Subject28Data.mat', ...
                 'Subject29Data.mat', ...
-                'Subject30Data.mat'
+                'Subject30Data.mat', ...
+                'Subject31Data.mat', ...
+                'Subject32Data.mat'
               };
 
 clear trials
@@ -53,6 +55,49 @@ for i = 1:length(trials)
     trials(i).RiseTime = ninty_percent_time - ten_percent_time;
     
 end
+
+% Percent Overshoot
+for i = 1:length(trials)
+    x = trials(i).Data.EndEffPos_FromJA;
+
+    trial_zero = mean(x(1:30));
+    trial_ss = mean(x(end-100:end));
+    trial_range = abs(trial_ss - trial_zero);
+    trial_max = max(abs(x));
+
+    trials(i).PercentOvershoot = (abs(trial_max - trial_zero)./trial_range - 1)*100;
+
+end
+
+%  Calculate settling time
+for i = 1:length(trials)
+    
+    x = trials(i).Data.EndEffPos_FromJA;
+    ss_val = GetSteadyStateLevel(x);
+    zero_val = GetZeroLevel(x);
+    x_range = abs(ss_val - zero_val);
+        
+    settleBound = 0.05*x_range;
+    unsettledInds = (x < (ss_val - settleBound)) | ( x > (ss_val + settleBound));
+    trials(i).SettlingTime = find(unsettledInds, 1, 'last');
+end
+
+% Energy
+for i = 1:length(trials)
+    x = trials(i).Data.EndEffPos_FromJA;
+    fx = trials(i).Data.Force(:,1);
+    dx = diff(x);
+    d_energy = [0; fx(1:length(dx)).*dx];
+    for iEnergy = 1:length(d_energy)
+        energy(iEnergy) = sum(d_energy(1:iEnergy));
+    end
+    trials(i).Energy = energy;
+    
+    v = trials(i).Data.xdot;
+    trials(i).Power = fx.*v;
+    trials(i).PowerMax = max(trials(i).Power);
+end
+
 
 
 %% Make Plots Individually
@@ -116,19 +161,18 @@ end
 
 locations = {'Left', 'Right', 'Down', 'Up'};
 for targetDirNum = 1:4
-    fig = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, 'ShowMovementMatch', true, 'ShowViolations', false);
-    set(fig,'PaperOrientation','landscape');
-    set(fig,'PaperUnits','normalized');
-    set(fig,'PaperPosition', [0 0 1 1]);
-    figName = sprintf('CombinedPlot_%s.pdf', locations{targetDirNum});
-    
-%     print(fig, '-dpdf', figName, '-fillpage')
+    fig = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, 'ShowMovementMatch', false, 'ShowViolations', false);
+%     set(fig,'PaperOrientation','landscape');
+%     set(fig,'PaperUnits','normalized');
+%     set(fig,'PaperUnits','inches','PaperPosition', [0 0 12 8]);
+%     figName = sprintf('CombinedPlot_%s.jpg', locations{targetDirNum});
+%     print(fig, '-djpeg', figName, '-r300')
     
 end
 
 %% Make max velocity bar graphs
 
-subject = 20;
+subject = 22;
 
 % Collect all filtered data
 data_processed = [];
@@ -167,6 +211,10 @@ for targetNum = 1:4
     end
 end
 
+orange = [255, 165, 0]/256;
+dampColors = {'b', 'g', orange};
+
+
 fig = figure;
 set(fig,'Color',[1,1,1]);
 for targetNum = 1:4
@@ -202,7 +250,7 @@ for targetNum = 1:4
     % Plot 
     ax = subplot(1, 4, targetNum);
     for i = 1:length(xdotmax_mean)
-        bar(c(i),xdotmax_mean(i));
+        bar(c(i),xdotmax_mean(i), 'FaceColor', dampColors{i});
         hold on
     end
     
@@ -240,9 +288,9 @@ SetYLimsEqual(child, 'BottomPadPercent', 0)
 
 
 %% Make percent overshoot bar graphs
-subject = 20;
+subject = 22;
 
-po_rm_meas = zeros(10,4,4);
+% po_rm_meas = zeros(10,4,4);
 
 
 % Collect all filtered data
@@ -252,7 +300,7 @@ for targetNum = 1:4
         temp = FilterAndAnalyzeData(trials, targetNum, dampNum);
         data_processed = [data_processed; temp];
         
-        po_rm_means_temp = zeros(10,2);
+%         po_rm_means_temp = zeros(10,2);
         
         % print data table
         poAll = [];
@@ -292,6 +340,9 @@ for targetNum = 1:4
     end
 end
 
+orange = [255, 165, 0]/256;
+dampColors = {'b', 'g', orange};
+
 fig = figure;
 set(fig,'Color',[1,1,1]);
 for targetNum = 1:4
@@ -327,7 +378,7 @@ for targetNum = 1:4
     % Plot 
     ax = subplot(1, 4, targetNum);
     for i = 1:length(po_mean)
-        bar(c(i),po_mean(i));
+        bar(c(i),po_mean(i), 'FaceColor', dampColors{i});
         hold on
     end
     
@@ -363,26 +414,80 @@ for i = length(child):-1:1
 end
 SetYLimsEqual(child, 'BottomPadPercent', 0)
 
+set(fig,'PaperUnits','inches','PaperPosition', [0 0 12 8]);
+figName = sprintf('CombinedPlot_%s.jpg', locations{targetDirNum});
+print(fig, '-djpeg', figName, '-r300')
 
-% Repeated Measures Anova - Percent Overshoot
+
+%% Repeated Measures Anova - Percent Overshoot
 fprintf('RM ANOVA - Percent Overshoot - All Damping Groups')
 % Left
 fprintf('\n\n\nLeft\n')
-CalcRepeatedAnova(po_rm_meas(:,2:4,1));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(po_rm_meas(:,2:4,1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[2,3],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[2,4],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[3,4],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
 
 
-% Left
+
+% Right
 fprintf('\n\n\nRight\n')
-CalcRepeatedAnova(po_rm_meas(:,2:4,2));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(po_rm_meas(:,2:4,2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[2,3],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[2,4],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[3,4],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
 
 
-% Left
+
+% Down
 fprintf('\n\n\nDown\n')
-CalcRepeatedAnova(po_rm_meas(:,2:4,3));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(po_rm_meas(:,2:4,3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
 
-% Left
+res = CalcRepeatedAnova(po_rm_meas(:,[2,3],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[2,4],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[3,4],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+% Up
 fprintf('\n\n\nUp\n')
-CalcRepeatedAnova(po_rm_meas(:,2:4,4));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(po_rm_meas(:,2:4,4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[2,3],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[2,4],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(po_rm_meas(:,[3,4],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+
 
 
 %% Repeated Measures Anova - Percent Overshoot - Positive vs Negative
@@ -542,8 +647,8 @@ for targetNum = 1:4
         subplot(2,3,dampNum)
         plot(x_temp.mean_, 'Color', 'k');
         hold on
-        plot(x_temp.ub_, 'Color', 'k', 'LineStyle', '--');
-        plot(x_temp.lb_, 'Color', 'k', 'LineStyle', '--');
+        plot(x_temp.mean_ + x_temp.std_, 'Color', 'k', 'LineStyle', '--');
+        plot(x_temp.mean_ - x_temp.std_, 'Color', 'k', 'LineStyle', '--');
         hold off
         if (dampNum == 2)
             title(sprintf('%s\n\n%s', targetDirText{targetNum}, dampText{dampNum}));
@@ -560,13 +665,14 @@ for targetNum = 1:4
         force_rms = sqrt(force_temp.mean_.^2);
         plot(force_temp.mean_, 'k');
         hold on
-        plot(force_temp.ub_, 'k--');
-        plot(force_temp.lb_, 'k--', 'HandleVisibility', 'off');
+        plot(force_temp.mean_ + force_temp.std_, 'k--');
+        plot(force_temp.mean_ - force_temp.std_, 'k--', 'HandleVisibility', 'off');
         plot(mean(force_rms)*ones(size(force_rms)), 'r')
         plot(max(force_rms)*ones(size(force_rms)), 'b')
         hold on
-        legend('Nominal', '+/-3std', 'RMS Average', '|Max|');
+        legend('Nominal', '+/-1 std', 'RMS Avg', '|Max|');
         legend('boxoff');
+        legend('Location', 'southeast')
         if (dampNum == 1)
             ylabel('Force [N]')
         end
@@ -579,8 +685,13 @@ for targetNum = 1:4
     axes_arr = [subplot(2,3,4), subplot(2,3,5), subplot(2,3,6)];
     SetYLimsEqual(axes_arr);
     
+    set(fig,'PaperUnits','inches','PaperPosition', [0 0 12 8]);
+    figName = sprintf('Force_%s.jpg', targetDirText{targetNum});
+    print(fig, '-djpeg', figName, '-r300')
     
 end
+
+
 
 
 fprintf('\n\n\n')
@@ -710,6 +821,75 @@ for i = 1:size(force_rm_mean,1)
                                 force_rm_max(i,4,4))
 end
 
+
+%% Force Max F p tables
+% Left
+fprintf('\n\n\nLeft\n')
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(force_rm_max(:,2:4,1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,3],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,4],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[3,4],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+
+% Right
+fprintf('\n\n\nRight\n')
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(force_rm_max(:,2:4,2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,3],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,4],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[3,4],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+
+% Down
+fprintf('\n\n\nDown\n')
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(force_rm_max(:,2:4,3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,3],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,4],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[3,4],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+% Up
+fprintf('\n\n\nUp\n')
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(force_rm_max(:,2:4,4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,3],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[2,4],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(force_rm_max(:,[3,4],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+
 %% Rise Time
 
 
@@ -818,7 +998,7 @@ for targetNum = 1:4
     % Plot 
     ax = subplot(1, 4, targetNum);
     for i = 1:3
-        bar(c(i),rise_time_means(i));
+        bar(c(i),rise_time_means(i), 'FaceColor', dampColors{i});
         hold on
     end
     
@@ -835,29 +1015,590 @@ for targetNum = 1:4
     end
     box('off')
     set(ax, 'ticklength', [0,0]);
-    legend(dampText);
-    legend('boxoff')
+%     legend(dampText);
+%     legend('boxoff')
     hold off
+    
+
 end
+
+SetYLimsEqual(fig.Children)
+
+set(fig,'PaperUnits','inches','PaperPosition', [0 0 12 8]);
+figName = sprintf('Rise_Time.jpg');
+print(fig, '-djpeg', figName, '-r300')
 
 
 % Rise Time Repeated Measures Anova
 
 % Left
 fprintf('\n\n\nLeft\n')
-CalcRepeatedAnova(rt_rm_meas(:,2:4,1));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(rt_rm_meas(:,2:4,1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,3],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,4],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[3,4],1));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
 
 
-% Left
+
+% Right
 fprintf('\n\n\nRight\n')
-CalcRepeatedAnova(rt_rm_meas(:,2:4,2));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(rt_rm_meas(:,2:4,2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,3],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,4],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[3,4],2));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
 
 
-% Left
+
+% Down
 fprintf('\n\n\nDown\n')
-CalcRepeatedAnova(rt_rm_meas(:,2:4,3));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(rt_rm_meas(:,2:4,3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
 
-% Left
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,3],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,4],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[3,4],3));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+% Up
 fprintf('\n\n\nUp\n')
-CalcRepeatedAnova(rt_rm_meas(:,2:4,4));
+fprintf('Group1\tGroup2\tGroup3\tDF_{cond}\tDF_{error}\tF\tp\n');
+res = CalcRepeatedAnova(rt_rm_meas(:,2:4,4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', 'Var', res.DFcond, res.DFerror, res.F, res.p)
 
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,3],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Neg.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[2,4],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Pos.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+res = CalcRepeatedAnova(rt_rm_meas(:,[3,4],4));
+fprintf('%s\t%s\t%s\t%d\t%d\t%f\t%f\n', 'Neg.', 'Var.', '', res.DFcond, res.DFerror, res.F, res.p)
+
+
+%% Calculate Energy In a Given Trial
+trialNum = 1000;
+
+figure
+ax1 = subplot(4,1,1);
+x = trials(trialNum).Data.EndEffPos_FromJA;
+fx = trials(trialNum).Data.Force(:,1);
+plot(x)
+ylabel('x [m]')
+xlabel('Time [ms]')
+
+dampText = trials(trialNum).DampingText;
+dirText = trials(trialNum).TargetDirText;
+title(sprintf('Direction: %s\tDamping: %s', dirText, dampText));
+
+ax2 = subplot(4,1,2);
+plot(fx)
+ylabel('Force [N]')
+xlabel('Time [ms]')
+
+% Calc energy
+dx = diff(x);
+d_energy = [0; (fx(1:length(dx)).*dx)];
+
+% add zero to beginning
+energy_abs = zeros(size(d_energy));
+energy = zeros(size(d_energy));
+energy_only_pos = zeros(size(d_energy));
+
+% only positive d_energy
+d_energy_only_pos = (d_energy + abs(d_energy))./2;
+
+for i = 1:length(d_energy)
+    energy_abs(i) = sum(abs(d_energy(1:i)));
+    energy(i) = sum(d_energy(1:i));
+    energy_only_pos(i) = sum(d_energy_only_pos(1:i));
+end
+
+
+ax3 = subplot(4,1,3);
+
+% plot(energy_abs)
+% hold on 
+plot(energy);
+% plot(energy_only_pos);
+% hold off
+ylabel('Energy [Nm]')
+xlabel('Time [ms]')
+% legend(['\Sigma |fx * dx |'], ['\Sigma fx * dx'], ['\Sigma fx * dx of only'  char(10) 'positive energy contrib'])
+% legend boxoff
+% legend('Location', 'east')
+% 
+% figure
+
+
+% Calculate power
+dt = 1/1000;
+power1 = d_energy/dt;
+
+v = trials(trialNum).Data.xdot;
+power2 = fx.*v;
+
+subplot(4,1,4)
+plot(power1)
+hold on
+plot(power2)
+hold off
+legend('p = dEnergy/dt', 'p = f*v');
+xlabel('Time [ms]');
+ylabel('Power [Nm/s]')
+
+%% Print Percent Overshoot Data
+
+trials_wov = [];
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        trials_wov = [trials_wov; GetTrialsWithoutViolations(trials, targetDirNum, dampNum)];
+    end
+end
+
+targetDirNum_all = [trials_wov.TargetDirNum];
+dampNum_all = [trials_wov.DampingNumber];
+subjectNum_all = [trials_wov.SubjectNumber];
+subjectNumList = sort(unique(subjectNum_all));
+
+targetDirList = {'Left', 'Right', 'Down', 'Up'};
+dampList = {'Positive', 'Negative', 'Variable'};
+
+fprintf('Percent Overshoot\n');
+fprintf('Direction\tDamping\tSubject\tMean\tStd\tn\n');
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        for iSubject = 1:length(subjectNumList)
+            subjectNum = subjectNumList(iSubject);
+            
+            % Get Set of Trials correponding to target direction, damping,
+            % and subject number
+            targetNum_inds = (targetDirNum_all == targetDirNum);
+            dampNum_inds = (dampNum_all == dampNum);
+            subjectNum_inds = (subjectNum_all == subjectNum);
+            
+            set_inds = (targetNum_inds & dampNum_inds & subjectNum_inds);
+            trials_set = trials_wov(set_inds);
+            
+            subject_rt = [trials_set.PercentOvershoot];
+            fprintf('%s\t%s\t%d\t%f\t%f\t%d\n', ...
+                    targetDirList{targetDirNum}, ...
+                    dampList{dampNum}, ...
+                    subjectNum, ...
+                    mean(subject_rt), ...
+                    std(subject_rt), ...
+                    length(subject_rt))
+        end
+    end
+end
+
+%% Print Rise Time Data
+
+trials_wov = [];
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        trials_wov = [trials_wov; GetTrialsWithoutViolations(trials, targetDirNum, dampNum)];
+    end
+end
+
+targetDirNum_all = [trials_wov.TargetDirNum];
+dampNum_all = [trials_wov.DampingNumber];
+subjectNum_all = [trials_wov.SubjectNumber];
+subjectNumList = sort(unique(subjectNum_all));
+
+targetDirList = {'Left', 'Right', 'Down', 'Up'};
+dampList = {'Positive', 'Negative', 'Variable'};
+
+fprintf('Rise Time [ms]\n');
+fprintf('Direction\tDamping\tSubject\tMean\tStd\tn\n');
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        for iSubject = 1:length(subjectNumList)
+            subjectNum = subjectNumList(iSubject);
+            
+            % Get Set of Trials correponding to target direction, damping,
+            % and subject number
+            targetNum_inds = (targetDirNum_all == targetDirNum);
+            dampNum_inds = (dampNum_all == dampNum);
+            subjectNum_inds = (subjectNum_all == subjectNum);
+            
+            set_inds = (targetNum_inds & dampNum_inds & subjectNum_inds);
+            trials_set = trials_wov(set_inds);
+            
+            subject_rt = [trials_set.RiseTime];
+            fprintf('%s\t%s\t%d\t%f\t%f\t%d\n', ...
+                    targetDirList{targetDirNum}, ...
+                    dampList{dampNum}, ...
+                    subjectNum, ...
+                    mean(subject_rt), ...
+                    std(subject_rt), ...
+                    length(subject_rt))
+        end
+    end
+end
+
+
+%% Print Settling Time Data
+
+trials_wov = [];
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        trials_wov = [trials_wov; GetTrialsWithoutViolations(trials, targetDirNum, dampNum)];
+    end
+end
+
+targetDirNum_all = [trials_wov.TargetDirNum];
+dampNum_all = [trials_wov.DampingNumber];
+subjectNum_all = [trials_wov.SubjectNumber];
+subjectNumList = sort(unique(subjectNum_all));
+
+targetDirList = {'Left', 'Right', 'Down', 'Up'};
+dampList = {'Positive', 'Negative', 'Variable'};
+
+fprintf('Settling Time [ms]\n');
+fprintf('Direction\tDamping\tSubject\tMean\tStd\tn\n');
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        for iSubject = 1:length(subjectNumList)
+            subjectNum = subjectNumList(iSubject);
+            
+            % Get Set of Trials correponding to target direction, damping,
+            % and subject number
+            targetNum_inds = (targetDirNum_all == targetDirNum);
+            dampNum_inds = (dampNum_all == dampNum);
+            subjectNum_inds = (subjectNum_all == subjectNum);
+            
+            set_inds = (targetNum_inds & dampNum_inds & subjectNum_inds);
+            trials_set = trials_wov(set_inds);
+            
+            subject_st = [trials_set.SettlingTime];
+            fprintf('%s\t%s\t%d\t%f\t%f\t%d\n', ...
+                    targetDirList{targetDirNum}, ...
+                    dampList{dampNum}, ...
+                    subjectNum, ...
+                    mean(subject_st), ...
+                    std(subject_st), ...
+                    length(subject_st))
+            
+        end
+    end
+end
+
+
+for targetDirNum = 1:4
+    figure
+    st_means = zeros(1,3);
+    for dampNum = 1:3
+        % Get Set of Trials correponding to target direction, damping,
+        % and subject number
+        targetNum_inds = (targetDirNum_all == targetDirNum);
+        dampNum_inds = (dampNum_all == dampNum);
+        
+        set_inds = (targetNum_inds & dampNum_inds);
+        trials_set = trials_wov(set_inds);
+        
+        st_set = [trials_set.SettlingTime];
+        st_mean(dampNum) = mean(st_set);
+        dampTextsCat{dampNum} = trials_set(1).DampingText;
+       
+        % Histogram of settling time
+        ax = subplot(1,3,dampNum)
+        hist(st_set, 25);
+        titleStr = sprintf('%s - %s', targetDirList{targetDirNum}, ...
+                                      dampTextsCat{dampNum});
+        title(titleStr);
+        xlabel('Settling Time [ms]');
+        ax.XLim = [0, 4000];
+        
+    end
+    
+    % average settling time
+%     c = categorical(dampTextsCat);
+%     
+%     % Plot 
+%     bar(c, st_mean);
+    
+end
+
+
+%% Print Settling Time Data
+
+trials_wov = [];
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        trials_wov = [trials_wov; GetTrialsWithoutViolations(trials, targetDirNum, dampNum)];
+    end
+end
+
+targetDirNum_all = [trials_wov.TargetDirNum];
+dampNum_all = [trials_wov.DampingNumber];
+subjectNum_all = [trials_wov.SubjectNumber];
+subjectNumList = sort(unique(subjectNum_all));
+
+targetDirList = {'Left', 'Right', 'Down', 'Up'};
+dampList = {'Positive', 'Negative', 'Variable'};
+
+fprintf('Energy Inputted [Nm]\n');
+fprintf('Direction\tDamping\tSubject\tMean\tStd\tn\n');
+for targetDirNum = 1:4
+    
+    % find minimum length
+    targetNum_inds = (targetDirNum_all == targetDirNum);
+    trials_wov_dir = trials_wov(targetNum_inds);
+    trial_lengths = [trials_wov_dir.nSamples];
+    trial_length_dir = min(trial_lengths);
+    
+    for dampNum = 1:3
+        for iSubject = 1:length(subjectNumList)
+            subjectNum = subjectNumList(iSubject);
+            
+            % Get Set of Trials correponding to target direction, damping,
+            % and subject number
+            targetNum_inds = (targetDirNum_all == targetDirNum);
+            dampNum_inds = (dampNum_all == dampNum);
+            subjectNum_inds = (subjectNum_all == subjectNum);
+            
+            set_inds = (targetNum_inds & dampNum_inds & subjectNum_inds);
+            trials_set = trials_wov(set_inds);
+            
+            % Get total energy inputted at the trial_length_dir sample
+            subject_energy = zeros(1, length(trials_set));
+            for iSubjectTrial = 1:length(trials_set)
+                subject_energy(iSubjectTrial) = trials_set(iSubjectTrial).Energy(trial_length_dir);
+            end
+            fprintf('%s\t%s\t%d\t%f\t%f\t%d\n', ...
+                    targetDirList{targetDirNum}, ...
+                    dampList{dampNum}, ...
+                    subjectNum, ...
+                    mean(subject_energy), ...
+                    std(subject_energy), ...
+                    length(subject_energy))
+            
+        end
+    end
+end
+
+
+% for targetDirNum = 1:4
+%     figure
+%     st_means = zeros(1,3);
+%     for dampNum = 1:3
+%         % Get Set of Trials correponding to target direction, damping,
+%         % and subject number
+%         targetNum_inds = (targetDirNum_all == targetDirNum);
+%         dampNum_inds = (dampNum_all == dampNum);
+%         
+%         set_inds = (targetNum_inds & dampNum_inds);
+%         trials_set = trials_wov(set_inds);
+%         
+%         st_set = [trials_set.SettlingTime];
+%         st_mean(dampNum) = mean(st_set);
+%         dampTextsCat{dampNum} = trials_set(1).DampingText;
+%        
+%         % Histogram of settling time
+%         ax = subplot(1,3,dampNum)
+%         hist(st_set, 25);
+%         titleStr = sprintf('%s - %s', targetDirList{targetDirNum}, ...
+%                                       dampTextsCat{dampNum});
+%         title(titleStr);
+%         ax.XLim = [0, 4000];
+%         
+%     end
+%     
+%     % average settling time
+% %     c = categorical(dampTextsCat);
+% %     
+% %     % Plot 
+% %     bar(c, st_mean);
+%     
+% end
+
+
+%% Power (Max) - Print stats
+
+trials_wov = [];
+for targetDirNum = 1:4
+    for dampNum = 1:3
+        trials_wov = [trials_wov; GetTrialsWithoutViolations(trials, targetDirNum, dampNum)];
+    end
+end
+
+trial_length = min([trials_wov.nSamples]);
+
+targetDirNum_all = [trials_wov.TargetDirNum];
+dampNum_all = [trials_wov.DampingNumber];
+subjectNum_all = [trials_wov.SubjectNumber];
+subjectNumList = sort(unique(subjectNum_all));
+
+targetDirList = {'Left', 'Right', 'Down', 'Up'};
+dampList = {'Positive', 'Negative', 'Variable'};
+
+fprintf('Power Inputted [Nm/s]\n');
+fprintf('Direction\tDamping\tSubject\tMean\tStd\tn\n');
+
+subject_power_max_mean = zeros(4,3,10);
+subject_power_max_stds = zeros(4,3,10);
+
+subject_x_all = {};
+subject_v_all = {};
+subject_f_all = {};
+subject_p_all = {};
+
+for targetDirNum = 1:4
+    
+    % find minimum length
+    targetNum_inds = (targetDirNum_all == targetDirNum);
+    trials_wov_dir = trials_wov(targetNum_inds);
+    trial_lengths = [trials_wov_dir.nSamples];
+    trial_length_dir = min(trial_lengths);
+    
+    for dampNum = 1:3
+        for iSubject = 1:length(subjectNumList)
+            subjectNum = subjectNumList(iSubject);
+            
+            % Get Set of Trials correponding to target direction, damping,
+            % and subject number
+            targetNum_inds = (targetDirNum_all == targetDirNum);
+            dampNum_inds = (dampNum_all == dampNum);
+            subjectNum_inds = (subjectNum_all == subjectNum);
+            
+            set_inds = (targetNum_inds & dampNum_inds & subjectNum_inds);
+            trials_set = trials_wov(set_inds);
+            
+            if (iSubject == 1 && targetDirNum == 3)
+                nTrials = length(trials_set);
+                subject_x = zeros(nTrials, trial_length);
+                subject_v = zeros(nTrials, trial_length);
+                subject_f = zeros(nTrials, trial_length);
+                subject_p = zeros(nTrials, trial_length);
+                for iTrial = 1:length(trials_set)
+                    subject_x(iTrial,:) = trials_set(iTrial).Data.EndEffPos_FromJA(1:trial_length);
+                    subject_v(iTrial,:) = trials_set(iTrial).Data.xdot(1:trial_length);
+                    subject_f(iTrial,:) = trials_set(iTrial).Data.Force(1:trial_length);
+                    subject_p(iTrial,:) = trials_set(iTrial).Power(1:trial_length);
+                end
+                
+                subject_x_all{dampNum} = subject_x;
+                subject_v_all{dampNum} = subject_v;
+                subject_f_all{dampNum} = subject_f;
+                subject_p_all{dampNum} = subject_p;
+                
+            end
+            
+            % Get total energy inputted at the trial_length_dir sample
+            subject_powermax = [trials_set.PowerMax];
+            fprintf('%s\t%s\t%d\t%f\t%f\t%d\n', ...
+                    targetDirList{targetDirNum}, ...
+                    dampList{dampNum}, ...
+                    subjectNum, ...
+                    mean(subject_powermax), ...
+                    std(subject_powermax), ...
+                    length(subject_powermax))
+            
+            subject_power_max_mean(targetDirNum, dampNum, iSubject) = mean(subject_powermax);
+            subject_power_max_stds(targetDirNum, dampNum, iSubject) = std(subject_powermax);
+                
+        end
+    end
+end
+
+
+orange = [255, 165, 0]/256;
+dampColors = {'b', 'g', orange};
+
+dampTexts = {'Positive', 'Negative', 'Variable'};
+c = categorical(dampTexts);
+subjectNum = 9;
+
+% subject_power_max_mean = mean(subject_power_max_mean, 3);
+% subject_power_max_stds = std(subject_power_max_stds,[],3);
+
+fig = figure;
+for targetDirNum = 1:4
+    % Plot 
+    ax = subplot(1, 4, targetDirNum);
+    for dampNum = 1:3
+        bar(c(dampNum),subject_power_max_mean(targetDirNum, dampNum, subjectNum), 'FaceColor', dampColors{dampNum});
+        hold on
+
+        er = errorbar(c(dampNum), subject_power_max_mean(targetDirNum, dampNum, subjectNum), ...
+                            subject_power_max_stds(targetDirNum, dampNum, subjectNum));
+        er.Color = [0,0,0];
+        er.LineStyle = 'none';
+        title(targetDirList{targetDirNum})
+    end
+        
+end
+
+subplot(1,4,1);
+ylabel('Average Max Power [Nm/s] - Subject 29')
+
+
+
+% Set Y Limits equal
+child = fig.Children;
+axes_arr = [];
+for i = length(child):-1:1
+    if (~isa(child(i), 'matlab.graphics.axis.Axes'))
+        child(i) = [];
+    end
+end
+SetYLimsEqual(child, 'BottomPadPercent', 0)
+
+
+%% X - V - F - P plot
+figure
+for dampNum = 1:3
+    subplot(4,1,1)
+    plot(mean(subject_x_all{dampNum}), 'Color', dampColors{dampNum});
+    ylabel('Position [m]')
+    hold on
+
+    subplot(4,1,2)
+    plot(mean(subject_v_all{dampNum}), 'Color', dampColors{dampNum});
+    ylabel('Velocity [m/s]')
+    hold on
+
+    subplot(4,1,3)
+    plot(mean(subject_f_all{dampNum}), 'Color', dampColors{dampNum});
+    ylabel('Force [N]')
+    hold on
+
+    subplot(4,1,4)
+    plot(mean(subject_p_all{dampNum}), 'Color', dampColors{dampNum})
+    ylabel('Power [Nm/s]')
+    hold on
+end
+subplot(4,1,1)
+title('Subject 21 - Down')
+
+subplot(4,1,1)
+xlabel('Time [ms]')
+legend('Positive', 'Negative', 'Variable')
+legend boxoff
+
+for i = 1:4
+    subplot(4,1,i)
+    xlim([0,trial_length])
+end

@@ -1,4 +1,4 @@
-emgdata = LoadEmgDataFile('SubjectData/Subject30/MVC.txt');
+emgdata = LoadEmgDataFile('SubjectData/Subject32/MVC.txt');
 
 % raw data
 emg_br_raw = emgdata(:,1);

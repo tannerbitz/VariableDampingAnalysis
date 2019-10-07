@@ -38,13 +38,13 @@ function res = CalcRepeatedAnova(data)
     % F statistic
     F = MScond/MSerror;
     
-    fprintf('Source\tSS\tdf\tMS\tF\n')
-    fprintf('Cond.\t%f\t%d\t%f\t%f\n', SScond, DFcond, MScond, F);
-    fprintf('Error\t%f\t%d\t%f\n\n', SSerror, DFerror, MSerror); 
+%     fprintf('Source\tSS\tdf\tMS\tF\n')
+%     fprintf('Cond.\t%f\t%d\t%f\t%f\n', SScond, DFcond, MScond, F);
+%     fprintf('Error\t%f\t%d\t%f\n\n', SSerror, DFerror, MSerror); 
     
     p = 1-fcdf(F, DFcond, DFerror);
     
-    fprintf('F(%d,%d) = %f\tp = %f\n', DFcond, DFerror, F, p);
+%     fprintf('F(%d,%d) = %f\tp = %f\n', DFcond, DFerror, F, p);
     
     res = struct;
     res.F = F;

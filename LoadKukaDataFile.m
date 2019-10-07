@@ -11,6 +11,9 @@ function res = LoadKukaDataFile(file)
     dataStruct.Damping = data(:,17);
     dataStruct.xdot = data(:,18);
     dataStruct.xdotdot = data(:,19);
+    if (size(data,2) > 19)
+        dataStruct.MotorTorque = data(:,20:26);
+    end
     
     res = dataStruct;
 end

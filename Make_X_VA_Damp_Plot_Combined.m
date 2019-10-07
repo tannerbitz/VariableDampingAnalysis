@@ -11,6 +11,8 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
     parse(p,varargin{:});
     showViolations = p.Results.ShowViolations;
     showMovementMatch = p.Results.ShowMovementMatch;
+    
+    targetDirText = {'Left', 'Right', 'Backward', 'Forward'};
 
     % Plot
     fig1 = figure;
@@ -21,7 +23,8 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
         set(fig2, 'Color', [1,1,1]);
     end
     
-    dampColors = {'b', 'r', 'g'};
+    orange = [255, 165, 0]/256;
+    dampColors = {'b', 'g', orange};
     dampTexts = {};
     
     % Make Plots
@@ -38,21 +41,24 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
 
         % Position
         subplot(3,4,1+(dampNum-1));
-        plot(data.wov.x.data_, 'Color', lightGreyColor)
+%         plot(data.wov.x.data_, 'Color', lightGreyColor)
+%         hold on
+        ub = data.wov.x.mean_ + data.wov.x.std_;
+        lb = data.wov.x.mean_ - data.wov.x.std_;
+        plot(data.wov.x.mean_, 'Color', 'k')
         hold on
         if (showViolations)
             plot(data.wv.x.data_, 'Color', lightGreenColor)
         end
-        plot(data.wov.x.mean_, 'Color', 'k')
-        plot(data.wov.x.ub_, 'Color', 'k', 'LineStyle', '--');
-        plot(data.wov.x.lb_, 'Color', 'k', 'LineStyle', '--');
+        plot(ub, 'Color', 'k', 'LineStyle', '--');
+        plot(lb, 'Color', 'k', 'LineStyle', '--');
         hold off
         if (dampNum == 1)
             ylabel('x [m]', 'Interpreter', 'latex');
         end
         if (dampNum == 2)
             title(sprintf('Direction: %s\n\nDamping: %s', ...
-                        data.TargetDirText, ...
+                        targetDirText{targetDirNum}, ...
                         data.DampingText));
         else
             title(sprintf('Damping: %s', ...
@@ -64,14 +70,18 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
                 
         % VA
         subplot(3,4,5+(dampNum-1));
-        plot(data.wov.va.data_, 'Color', lightGreyColor)
+%         plot(data.wov.va.data_, 'Color', lightGreyColor)
+        ub = data.wov.va.mean_ + data.wov.va.std_;
+        lb = data.wov.va.mean_ - data.wov.va.std_;
+        
+        plot(data.wov.va.mean_, 'Color', 'k')
         hold on
         if (showViolations)
             plot(data.wv.va.data_, 'Color', lightGreenColor)
         end
-        plot(data.wov.va.mean_, 'Color', 'k')
-        plot(data.wov.va.ub_, 'Color', 'k', 'LineStyle', '--');
-        plot(data.wov.va.lb_, 'Color', 'k', 'LineStyle', '--');
+
+        plot(ub, 'Color', 'k', 'LineStyle', '--');
+        plot(lb, 'Color', 'k', 'LineStyle', '--');
         hold off
         if (dampNum == 1)
             ylabel('$\dot{x} \ddot{x}$', 'Interpreter', 'latex');
@@ -81,14 +91,17 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
 
         % Damping
         subplot(3,4,9+(dampNum-1));
-        plot(data.wov.damp.data_, 'Color', lightGreyColor)
+%         plot(data.wov.damp.data_, 'Color', lightGreyColor)
+        ub = data.wov.damp.mean_ + data.wov.damp.std_;
+        lb = data.wov.damp.mean_ - data.wov.damp.std_;
+
+        plot(data.wov.damp.mean_, 'Color', 'k')
         hold on
         if (showViolations)
             plot(data.wv.damp.data_, 'Color', lightGreenColor)
         end
-        plot(data.wov.damp.mean_, 'Color', 'k')
-        plot(data.wov.damp.ub_, 'Color', 'k', 'LineStyle', '--');
-        plot(data.wov.damp.lb_, 'Color', 'k', 'LineStyle', '--');
+        plot(ub, 'Color', 'k', 'LineStyle', '--');
+        plot(lb, 'Color', 'k', 'LineStyle', '--');
         hold off
         if (dampNum == 1)
             ylabel('Damping [Ns/m]', 'Interpreter', 'latex');
@@ -102,7 +115,7 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
         if (dampNum > 1)
             hold on
         end
-        plot(data.wov.x.mean_, dampColors{dampNum});
+        plot(data.wov.x.mean_, 'Color', dampColors{dampNum},'LineWidth', 1.5);
         hold off
         box('off');
 
@@ -111,7 +124,7 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
         if (dampNum > 1)
             hold on
         end
-        plot(data.wov.va.mean_, dampColors{dampNum});
+        plot(data.wov.va.mean_, 'Color', dampColors{dampNum},'LineWidth', 1.5);
         hold off
         box('off');
 
@@ -120,7 +133,7 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
         if (dampNum > 1)
             hold on
         end
-        plot(data.wov.damp.mean_, dampColors{dampNum});
+        plot(data.wov.damp.mean_, 'Color', dampColors{dampNum},'LineWidth', 1.5);
         hold off
         box('off');
         
@@ -197,7 +210,7 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
             if (dampNum > 1)
                 hold on
             end
-            plot(data.wov.x_mm.mean_, dampColors{dampNum});
+            plot(data.wov.x_mm.mean_, dampColors{dampNum}, 'LineWidth', 1.5);
             hold off
             box('off');
 
@@ -206,7 +219,7 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
             if (dampNum > 1)
                 hold on
             end
-            plot(data.wov.va_mm.mean_, dampColors{dampNum});
+            plot(data.wov.va_mm.mean_, dampColors{dampNum}, 'LineWidth', 1.5);
             hold off
             box('off');
 
@@ -215,7 +228,7 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
             if (dampNum > 1)
                 hold on
             end
-            plot(data.wov.damp_mm.mean_, dampColors{dampNum});
+            plot(data.wov.damp_mm.mean_, dampColors{dampNum}, 'LineWidth', 1.5);
             hold off
             box('off');
 
@@ -231,7 +244,7 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
     
     % Apply legends
     subplot(3,4,4)
-    legend(dampText)
+    legend(dampText,'FontSize',11)
     legend('boxoff');
     if (targetDirNum == 1 || targetDirNum == 3)
         legend('Location', 'southeast');
@@ -239,25 +252,26 @@ function res = Make_X_VA_Damp_Plot_Combined(trials, targetDirNum, varargin)
         legend('Location', 'northeast');
     end
     
-    % Apply legends
-    subplot(3,4,8)
-    legend(dampText)
-    legend('boxoff');
-    if (targetDirNum == 1 || targetDirNum == 3)
-        legend('Location', 'southeast');
-    else
-        legend('Location', 'northeast');
-    end
-
-    % Apply legends
+%     % Apply legends
+%     subplot(3,4,8)
+%     legend(dampText)
+%     legend('boxoff');
+%     if (targetDirNum == 1 || targetDirNum == 3)
+%         legend('Location', 'southeast');
+%     else
+%         legend('Location', 'northeast');
+%     end
+% 
+%     % Apply legends
+%     subplot(3,4,12)
+%     legend(dampText)
+%     legend('boxoff');
+%     if (targetDirNum == 1 || targetDirNum == 3)
+%         legend('Location', 'southeast');
+%     else
+%         legend('Location', 'northeast');
+%     end
     subplot(3,4,12)
-    legend(dampText)
-    legend('boxoff');
-    if (targetDirNum == 1 || targetDirNum == 3)
-        legend('Location', 'southeast');
-    else
-        legend('Location', 'northeast');
-    end
     xlabel('Time [ms]', 'Interpreter', 'latex');
     
     
