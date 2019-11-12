@@ -16,15 +16,20 @@ subjectMats = {
                 'Subject31Data.mat', ...
                 'Subject32Data.mat'
               };
-
+          
 clear trials
+
+% Load MAT Files
+fprintf("Loading MAT files\n")
+
 trials = [];
 for i = 1:length(subjectMats)
     file = fullfile(subjectMatFolder, subjectMats{i});
     temp = load(file, 'trials');
     trials = [trials; temp.trials];
 end
-          
+
+fprintf("Calculating rise time\n");
 
 % Rise Time
 
@@ -56,6 +61,8 @@ for i = 1:length(trials)
     
 end
 
+fprintf("Calculating percent overshoot\n");
+
 % Percent Overshoot
 for i = 1:length(trials)
     x = trials(i).Data.EndEffPos_FromJA;
@@ -69,6 +76,8 @@ for i = 1:length(trials)
 
 end
 
+fprintf("Calculating settling time\n");
+
 %  Calculate settling time
 for i = 1:length(trials)
     
@@ -76,11 +85,16 @@ for i = 1:length(trials)
     ss_val = GetSteadyStateLevel(x);
     zero_val = GetZeroLevel(x);
     x_range = abs(ss_val - zero_val);
-        
-    settleBound = 0.05*x_range;
-    unsettledInds = (x < (ss_val - settleBound)) | ( x > (ss_val + settleBound));
-    trials(i).SettlingTime = find(unsettledInds, 1, 'last');
+    
+    for percentErr = 1:1:10
+        settleBound = percentErr*0.01*x_range;
+        unsettledInds = (x < (ss_val - settleBound)) | ( x > (ss_val + settleBound));
+        trials(i).SettlingTime(percentErr) = find(unsettledInds, 1, 'last');
+    end
+
 end
+
+fprintf("Calculating energy\n");
 
 % Energy
 for i = 1:length(trials)
@@ -98,6 +112,7 @@ for i = 1:length(trials)
     trials(i).PowerMax = max(trials(i).Power);
 end
 
+fprintf("Done!\n")
 
 
 %% Make Plots Individually
@@ -1268,6 +1283,12 @@ for targetDirNum = 1:4
     end
 end
 
+settling_time_wov = zeros(length(trials_wov), length(trials(1).SettlingTime));
+for i = 1:length(trials_wov)
+    settling_time_wov(i,:) = trials_wov(i).SettlingTime;
+end
+
+
 targetDirNum_all = [trials_wov.TargetDirNum];
 dampNum_all = [trials_wov.DampingNumber];
 subjectNum_all = [trials_wov.SubjectNumber];
@@ -1275,6 +1296,11 @@ subjectNumList = sort(unique(subjectNum_all));
 
 targetDirList = {'Left', 'Right', 'Down', 'Up'};
 dampList = {'Positive', 'Negative', 'Variable'};
+
+T = table(subjectNum_all', dampNum_all', targetDirNum_all', settling_time_wov);
+writetable(T, 'SettlingTime.xlsx');
+
+%%
 
 fprintf('Settling Time [ms]\n');
 fprintf('Direction\tDamping\tSubject\tMean\tStd\tn\n');
