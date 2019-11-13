@@ -39,6 +39,13 @@ data_all = [8.3	0.6	9.1	0.7	6.9	0.6	4.4	0.3	7.2	0.4;
             6.2	0.4	6.6	0.5	4.7	0.4	2.8	0.2	5.1	0.3];
 
 
+%% Settling Time
+title_part = 'Settling Time';
+plot_name = 'settling_time';
+
+data_all = [1065.6	56.54	1218.05	72.02	1402.58	50.61	1708.94	64.13	1348.79	45.87;
+            828.03	30.02	855.52	26.16	997.46	36.74	1045.76	39.03	931.69	21;
+            863.94	25.24	903.73	36.26	1007.68	38.9	1057.27	43.39	958.16	21.01];
 
 %% Make Plots
 
@@ -100,6 +107,8 @@ for targetDirNum = 1:5
                 ylabelstr = 'Force [N]';
             elseif (strcmp(title_part, 'Mean Interaction Force'))
                 ylabelstr = 'Force [N]';
+            elseif (strcmp(title_part, 'Settling Time'))
+                ylabelstr = 'Time [ms]';
             end
             ylabel(ylabelstr)
         end
