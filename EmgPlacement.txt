@@ -1,0 +1,6 @@
+BR	- Sensor 1					MVC Test - Resisted Elbow Flexion 
+BI	- Sensor 7 (which is programmed as sensor 2)	MVC Test - Resisted Flexion
+TLONG	- Sensor 3					MVC Test - Resisted Extension
+TLAT	- Sensor 5					MVC Test - Resisted Extension
+AD 	- Sensor 6					MVC Test - Anterior Deltoid Flexion (Straight arm, place hand/arm under top desk shelf and flex)
+PD 	- Sensor 8					MVC Test - Push against desk/immobile surface
